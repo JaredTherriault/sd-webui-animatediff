@@ -17,7 +17,7 @@ from modules.processing import StableDiffusionProcessing, Processed
 
 # From AnimateDiff extension
 from scripts.logging_animatediff import logger_animatediff
-from scripts import unet_injection, frame_interpolation
+from scripts import unet_injection, frame_interpolation, ui_frame_interpolation
 from scripts.unet_injection import InjectionParams
 from motion_module import MotionWrapper, VanillaTemporalModule
 
@@ -99,7 +99,7 @@ class AnimateDiffScript(scripts.Script):
                 remove_mm = gr.Button(value="Remove motion module from any memory")
                 move_mm.click(fn=self.move_motion_module_to_cpu)
                 remove_mm.click(fn=self.remove_motion_module)
-            frame_interpolation_controls = frame_interpolation.get_interpolation_ui_controls()
+            frame_interpolation_controls = ui_frame_interpolation.get_interpolation_ui_controls()
         self.ui_controls = (enable, loop_number, video_length, fps, model) + frame_interpolation_controls
         return self.ui_controls
         
@@ -273,7 +273,7 @@ class AnimateDiffScript(scripts.Script):
                     frame_multiplier = args[0]
                     video_length *= frame_multiplier
                     fps *= frame_multiplier
-                    frame_interpolation.interpolate_frames(res, *args)
+                    frame_interpolation.interpolate_frames(res.images, res.index_of_first_image + 1, *args)
                 
                 namegen = images.FilenameGenerator(p, res.seed, res.prompt, res.images[0])
                 
