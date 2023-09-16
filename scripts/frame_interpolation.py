@@ -30,7 +30,7 @@ def get_interpolation_ui_controls():
             with gr.Row(): 
                 iterations = gr.Number(minimum=1, value=3, precision=0, label="iterations", type="value", info="Controls the number of iterations at each pyramid level. More iterations can improve accuracy but increase computation time.")
                 poly_n = gr.Number(minimum=1, value=5, precision=0, label="poly_n", type="value", info="Pixel neighborhood size used when estimating polynomial expansion. A higher value can capture more complex motion but may increase noise.")
-                poly_sigma = gr.Number(minimum=0.1, value=1.5, step=0.1, label="poly_sigma", type="value", info="Standard deviation of Gaussian to smooth polynomial expansion derivatives. Larger value = stronger smoothing, which can reduce noise.")
+                poly_sigma = gr.Number(minimum=0.0000001, value=1.5, step=0.1, label="poly_sigma", type="value", info="Standard deviation of Gaussian to smooth polynomial expansion derivatives. Larger value = stronger smoothing, which can reduce noise.")
                 flags = gr.Number(minimum=0, value=0, precision=0, label="flags", type="value", info="Include additional flags to customize the optical flow calculation. The value of 0 typically means no additional flags are used.")
     return interpolation_enabled, frame_multiplier, method, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, flags
     
