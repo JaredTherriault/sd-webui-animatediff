@@ -17,7 +17,7 @@ from modules.processing import StableDiffusionProcessing, Processed
 
 # From AnimateDiff extension
 from scripts.logging_animatediff import logger_animatediff
-from scripts import unet_injection
+from scripts import unet_injection, frame_interpolation
 from scripts.unet_injection import InjectionParams
 from motion_module import MotionWrapper, VanillaTemporalModule
 
@@ -99,7 +99,8 @@ class AnimateDiffScript(scripts.Script):
                 remove_mm = gr.Button(value="Remove motion module from any memory")
                 move_mm.click(fn=self.move_motion_module_to_cpu)
                 remove_mm.click(fn=self.remove_motion_module)
-        self.ui_controls = enable, loop_number, video_length, fps, model
+            frame_interpolation_controls = frame_interpolation.get_interpolation_ui_controls()
+        self.ui_controls = (enable, loop_number, video_length, fps, model) + frame_interpolation_controls
         return self.ui_controls
         
     def make_controls_compatible_with_infotext_copy_paste(self, ui_controls = []):
@@ -128,8 +129,7 @@ class AnimateDiffScript(scripts.Script):
         unet = self.get_unet(p)
         motion_module = AnimateDiffScript.motion_module
         
-        if p.sampler_name == DDIM_SAMPLER_NAME:
-            unet_injection.set_ddim_alpha_for_animatediff(p)
+        unet_injection.set_ddim_alpha_for_animatediff(p)
         
         if not shared.cmd_opts.no_half:
             AnimateDiffScript.motion_module.half()
@@ -153,8 +153,7 @@ class AnimateDiffScript(scripts.Script):
             
         unet_injection.restore_original_timestep()
         
-        if p.sampler_name == DDIM_SAMPLER_NAME:
-            unet_injection.restore_original_ddim_alpha(p)
+        unet_injection.restore_original_ddim_alpha(p)
             
         if shared.cmd_opts.lowvram:
             self.move_motion_module_to_cpu()
@@ -209,7 +208,7 @@ class AnimateDiffScript(scripts.Script):
             p.extra_generation_params[MODULE_NAME] = f"{control_params}"
 
     def before_process(
-            self, p: StableDiffusionProcessing, enable_animatediff=False, loop_number=0, video_length=16, fps=8, model="mm_sd_v14.ckpt"):
+            self, p: StableDiffusionProcessing, enable_animatediff=False, loop_number=0, video_length=16, fps=8, model="mm_sd_v14.ckpt", *args):
         if enable_animatediff:
             self.logger.info(f"AnimateDiff process start with video Max frames {video_length}, FPS {fps}, duration {video_length/fps},  motion module {model}.")
             assert video_length > 0 and fps > 0, "Video length and FPS should be positive."
@@ -224,7 +223,7 @@ class AnimateDiffScript(scripts.Script):
             self.serialize_args_to_infotext(p)
                 
     def postprocess_batch_list(
-            self, p, pp, enable_animatediff=False, loop_number=0, video_length=16, fps=8, model="mm_sd_v14.ckpt", **kwargs):
+            self, p, pp, enable_animatediff = False, *args, **kwargs):
         if enable_animatediff:
             p.main_prompt = p.all_prompts[0] ## Ensure the video's infotext displays correctly below the video
 
@@ -236,9 +235,8 @@ class AnimateDiffScript(scripts.Script):
         video_extension = shared.opts.data.get("animatediff_file_format", "") or "gif"
         video_path = f"{video_path_before_extension}.{video_extension}"
         video_paths.append(video_path)
-        video_duration = 1 / fps * 1000 # duration is defined in whole ms, not a fraction of a second
+        frame_duration = 1 / fps * 1000 # duration is defined in whole ms, not a fraction of a second
         video_use_lossless_quality = shared.opts.data.get("animatediff_use_lossless_quality", False)
-        video_quality = shared.opts.data.get("animatediff_video_quality", 95)
         
         geninfo = res.infotext(p, res.index_of_first_image)
         use_geninfo = shared.opts.enable_pnginfo and geninfo is not None
@@ -246,20 +244,22 @@ class AnimateDiffScript(scripts.Script):
         if video_extension == "gif":
             optimize = not video_use_lossless_quality
             imageio.mimsave(
-                video_path, video_list, duration=video_duration, loop=loop_number, optimize=optimize, 
+                video_path, video_list, duration=frame_duration, loop=loop_number, optimize=optimize, 
                 comment=(geninfo if use_geninfo else ""))
         elif video_extension == "webp":
             if use_geninfo:
                 exif_bytes = piexif.dump({
                         "Exif":{
                             piexif.ExifIFD.UserComment:piexif.helper.UserComment.dump(geninfo, encoding="unicode")}})
+            video_quality = shared.opts.data.get("animatediff_video_quality", 95)
             imageio.mimsave(
-                video_path, video_list, duration=video_duration, loop=loop_number, 
+                video_path, video_list, duration=frame_duration, loop=loop_number, 
                 quality=video_quality, lossless=video_use_lossless_quality, exif=(exif_bytes if use_geninfo else b''))
 
     def postprocess(
             self, p: StableDiffusionProcessing, res: Processed, 
-            enable_animatediff=False, loop_number=0, video_length=16, fps=8, model="mm_sd_v14.ckpt"):
+            enable_animatediff=False, loop_number=0, video_length=16, fps=8, 
+            model="mm_sd_v14.ckpt", interpolation_enabled = False, *args):
         
         if enable_animatediff:
             self.eject_motion_module_from_unet(p)
@@ -268,6 +268,12 @@ class AnimateDiffScript(scripts.Script):
                 
                 video_paths = []
                 self.logger.info("Merging images into video.")
+                
+                if interpolation_enabled:
+                    frame_multiplier = args[0]
+                    video_length *= frame_multiplier
+                    fps *= frame_multiplier
+                    frame_interpolation.interpolate_frames(res, *args)
                 
                 namegen = images.FilenameGenerator(p, res.seed, res.prompt, res.images[0])
                 
