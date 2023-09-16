@@ -69,7 +69,7 @@ def generate_frames_in_between(frame_1: np.ndarray, frame_2: np.ndarray, num_fra
         flow[:,:,0] += np.arange(w)
         flow[:,:,1] += np.arange(h)[:,np.newaxis]
         border_mode = cv2.BORDER_REFLECT
-        interpolated_frame = cv2.remap(frame_1, flow, None, cv2.INTER_LINEAR, borderMode=1) # INTER_LANCZOS4 is p good
+        interpolated_frame = cv2.remap(frame_1, flow, None, cv2.INTER_LANCZOS4, borderMode=1) # INTER_LANCZOS4 is p good
         resultant_frames.append(Image.fromarray(interpolated_frame, mode="RGB"))
     return resultant_frames
 
