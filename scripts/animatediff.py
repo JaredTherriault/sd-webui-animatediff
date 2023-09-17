@@ -273,7 +273,7 @@ class AnimateDiffScript(scripts.Script):
                     frame_multiplier = args[0]
                     video_length *= frame_multiplier
                     fps *= frame_multiplier
-                    frame_interpolation.interpolate_frames(res.images, res.index_of_first_image + 1, *args)
+                    res.images[res.index_of_first_image:] = frame_interpolation.interpolate_frames(res.images[res.index_of_first_image:], *args)
                 
                 namegen = images.FilenameGenerator(p, res.seed, res.prompt, res.images[0])
                 
