@@ -227,8 +227,29 @@ class AnimateDiffScript(scripts.Script):
         if enable_animatediff:
             p.main_prompt = p.all_prompts[0] ## Ensure the video's infotext displays correctly below the video
 
-    def save_video(self, p, res, loop_number, video_length, fps, video_paths, output_directory, image_itr, generated_filename):
+    def save_video(
+            self, p, res, loop_number, video_length, fps, video_paths, output_directory, 
+            image_itr, generated_filename, interpolation_enabled = False, *args):
         video_list = res.images[image_itr:image_itr + video_length]
+        
+        def _add_reverse(images: list, add_reverse_frames = True, remove_head = True, remove_tail = True):
+            if add_reverse_frames:
+                video_list_reverse = images[::-1]
+                if remove_head:
+                    video_list_reverse.pop(0)
+                if remove_tail:
+                    video_list_reverse.pop(-1)
+                return images + video_list_reverse
+            return video_list
+        
+        video_list = _add_reverse(video_list, False)
+        
+        if interpolation_enabled:
+            frame_multiplier = args[0]
+            video_length *= frame_multiplier
+            fps *= frame_multiplier
+            video_list = frame_interpolation.interpolate_frames(video_list, *args)
+        
         seq = images.get_next_sequence_number(output_directory, "")
         filename = f"{seq:05}-{generated_filename}"
         video_path_before_extension = f"{output_directory}/{filename}"
@@ -259,7 +280,7 @@ class AnimateDiffScript(scripts.Script):
     def postprocess(
             self, p: StableDiffusionProcessing, res: Processed, 
             enable_animatediff=False, loop_number=0, video_length=16, fps=8, 
-            model="mm_sd_v14.ckpt", interpolation_enabled = False, *args):
+            model="mm_sd_v14.ckpt", *args):
         
         if enable_animatediff:
             self.eject_motion_module_from_unet(p)
@@ -268,12 +289,6 @@ class AnimateDiffScript(scripts.Script):
                 
                 video_paths = []
                 self.logger.info("Merging images into video.")
-                
-                if interpolation_enabled:
-                    frame_multiplier = args[0]
-                    video_length *= frame_multiplier
-                    fps *= frame_multiplier
-                    res.images[res.index_of_first_image:] = frame_interpolation.interpolate_frames(res.images[res.index_of_first_image:], *args)
                 
                 namegen = images.FilenameGenerator(p, res.seed, res.prompt, res.images[0])
                 
@@ -289,7 +304,7 @@ class AnimateDiffScript(scripts.Script):
                                                    "[seed]").lstrip(' ').rstrip('\\ /')
                 
                 for image_itr in range(res.index_of_first_image, len(res.images), video_length):
-                    self.save_video(p, res, loop_number, video_length, fps, video_paths, output_directory, image_itr, generated_filename)
+                    self.save_video(p, res, loop_number, video_length, fps, video_paths, output_directory, image_itr, generated_filename, *args)
                     
                 res.images = video_paths
                 self.logger.info("AnimateDiff process end.")
