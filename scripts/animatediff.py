@@ -208,6 +208,19 @@ class AnimateDiffScript(scripts.Script):
         if len(control_params) > 0:
             p.extra_generation_params[MODULE_NAME] = f"{control_params}"
 
+    def set_ddim_alpha(self, p: StableDiffusionProcessing): 
+        self.logger.info(f"Setting DDIM alpha.")
+        beta_start = 0.00085
+        beta_end = 0.012
+        betas = torch.linspace(beta_start, beta_end, p.sd_model.num_timesteps, dtype=torch.float32, device=device)
+        alphas = 1.0 - betas
+        alphas_cumprod = torch.cumprod(alphas, dim=0)
+        alphas_cumprod_prev = torch.cat(
+            (torch.tensor([1.0], dtype=torch.float32, device=device), alphas_cumprod[:-1]))
+        p.sd_model.betas = betas 
+        p.sd_model.alphas_cumprod = alphas_cumprod
+        p.sd_model.alphas_cumprod_prev = alphas_cumprod_prev
+
     def before_process(
             self, p: StableDiffusionProcessing, enable_animatediff=False, loop_number=0, video_length=16, fps=8, model="mm_sd_v14.ckpt"):
         if enable_animatediff:
@@ -222,6 +235,7 @@ class AnimateDiffScript(scripts.Script):
             self.load_motion_module_and_inject_motion_module_to_unet(p, injection_params, model)
              
             self.serialize_args_to_infotext(p)
+            self.set_ddim_alpha(p)
                 
     def postprocess_batch_list(
             self, p, pp, enable_animatediff=False, loop_number=0, video_length=16, fps=8, model="mm_sd_v14.ckpt", **kwargs):
